@@ -8,8 +8,7 @@ import time
 import wandb
 import psutil
 
-# ---- comand for downloading biome chunk files ----
-# hf download SakanaAI/dreamcubed --repo-type dataset --local-dir data/ --include "biome_chunks_32_combined/*"
+# Download raw biome chunk files into data/ before running this script.
 
 def log_memory_usage(stage_name):
     """Log current memory usage with wandb."""

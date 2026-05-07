@@ -7,15 +7,11 @@ This repository contains the training, inference, and evaluation code for Dream-
 
 ## Pretrained Models
 
-- [MD4 Patch 4 (balanced natural biome dataset)](https://huggingface.co/SakanaAI/DreamCubedDP4)
-- [MD4 Patch 2 (balanced natural biome dataset)](https://huggingface.co/SakanaAI/DreamCubedDP2)
-- [DDPM Patch 2 (balanced natural biome dataset)](https://huggingface.co/SakanaAI/DreamCubedCP2)
+Anonymized model checkpoints will be distributed through the supplementary materials for double blind review.
 
 ## Dataset
 
-Raw Minecraft chunk data and the processed datasets used for training are available here:
-
-- [Dream-Cubed Dataset](https://huggingface.co/datasets/SakanaAI/DreamCubed2M)
+Anonymized dataset will be distributed through the supplementary materials for double blind review.
 
 ## Setup
 
