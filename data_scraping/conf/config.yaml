@@ -1,0 +1,115 @@
+defaults:
+  - _self_
+
+  # - task: im_vox
+  # - task: inpaint_vox
+
+  # - override hydra/launcher: submitit_slurm 
+  - override hydra/launcher: submitit_local
+
+hydra:
+  sweeper:
+    params:
+      exp_name: 0, 1, 2
+      train.lr: 1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6
+      # task.num_views: 1, 2, 3, 4, 5, 6, 7, 8
+  launcher:
+    # submitit_folder: /checkpoint/${USER}/mc_runs/
+    # queue: xeon
+    tasks_per_node: 1
+    cpus_per_task: 1
+    gpus_per_node: 1
+    timeout_min: 1440
+    # timeout_min: 60
+    mem_gb: 10
+    # Change to your email
+    # slurm_additional_parameters: ["--signal=USR1@120", "--cpus-per-task=10", "--mem=10G", "--mail-type=ALL", "--mail-user=your_email"]
+
+exp_name: 0
+save_dir: None
+device: cuda
+
+# task: ray_voxels
+# task: inpaint_voxels
+
+data:
+  # dataset: InPaintRayVoxelsDatasetij
+  # dataset: ImsRayVoxelsDataset
+  # dataset: ImsVoxelsDataset
+  # dataset: CoordsVoxelsDataset
+  chunk_shape: [32, 32, 32]
+  targeted_biome_label: river
+  targeted_biome_radius: 8192
+  targeted_biome_stride: 32
+  # How to find candidate biome locations:
+  # - "server": query the running MC server biome at (x,z) (authoritative, slower)
+  # - "pyubiomes": use Pyubiomes/cubiomes predictions (fast, may mismatch depending on build)
+  targeted_biome_locator: pyubiomes
+  # Upper bound on how many candidate points we will consider (helps avoid long scans)
+  targeted_biome_max_candidates: 5000
+  load: True
+  num_samples: 10000
+  data_dir: data
+  pct_train: 0.8
+  pct_val: 0.1
+  pct_test: 0.1
+  num_block_types: 254
+  biome_use_macro_subchunks: false
+  biome_y_shift_abs: 12 
+  use_dense_rpc: true
+  use_majority_biome: true
+  village_use_single_label: true
+  map_name: kargeth
+  area_corners: [[562, 88], [-163, 452]]
+  area_stride_x: 10
+  area_stride_z: 10
+  area_stride_y: 10
+  area_surface_method: min
+  # Preload chunks intersecting read window before reading
+  preload_chunks: true
+  # Milliseconds to wait after preloading to allow population to complete
+  preload_wait_ms: 200
+  # Caves collection tuning
+  cave_min_air_ratio: 0.10
+  cave_y_stride: 8
+
+data_gen:
+  # mode: screenshots
+  # mode: villages
+  # mode: voxels_in_area
+  # mode: voxels_by_biome
+  # mode: voxeles
+  # mode: villages
+  # mode: caves
+  # mode: nether
+  mode: targeted_biome
+  save_noisy_village: False
+  
+  load: True
+  i: null
+
+train:
+  load: true
+  lr: 0.0001
+  # loss: mse
+  loss: ce
+  num_updates: 100000
+  eval_interval: 100
+  log_interval: 1
+  save_interval: 100
+  batch_size: 32
+
+# model:
+  # name: Conv3dDenseDeconv3d
+  # name: Conv2dDenseDeconv2d
+  # name: Conv2dDenseDeconv3d
+  # name: Conv2dDense
+  # name: DenseDeconv3d
+  # name: Dense
+
+# optimizer:
+
+evaluate:
+  mode: None
+  # mode: plt
+  # mode: mc

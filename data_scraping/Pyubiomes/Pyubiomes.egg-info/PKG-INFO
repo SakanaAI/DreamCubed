@@ -1,0 +1,17 @@
+Metadata-Version: 2.4
+Name: Pyubiomes
+Version: 0.2.0
+Summary: a (probably bad wip) python wrapper for the C library Cubiomes
+Home-page: https://github.com/4gboframram/Pyubiomes
+Description-Content-Type: text/markdown
+License-File: LICENSE.txt
+Dynamic: description
+Dynamic: description-content-type
+Dynamic: home-page
+Dynamic: license-file
+Dynamic: summary
+
+
+# Pyubiomes
+
+Vendored local wrapper around the Cubiomes C library used by the scraping utilities.

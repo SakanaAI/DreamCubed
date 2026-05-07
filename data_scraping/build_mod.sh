@@ -1,0 +1,1 @@
+python -m grpc_tools.protoc -I./ --python_out=./clients/python/ --grpc_python_out=./clients/python/ ./src/main/proto/minecraft.proto && mvn install && mv target/minecraft-rpc-0.0.5.jar server/mods/

@@ -260,3 +260,136 @@ python calc_fid.py \
 - Training, inference, and FID scripts all assume that checkpoint directories contain the `config.json` written during training.
 - Rendered outputs depend on `block_textures/`; if textures are missing, some scripts can still fall back to untextured rendering.
 - Processed datasets can be either saved `.pt` tensors or memmap directories containing `manifest.json`.
+
+
+# Minecraft Data Scraping
+
+Scripts for scraping data from Minecraft servers are available in the data_scraping folder. This extends the Evocraft API for interfacing with a running Minecraft server to select and save voxel chunks from a world, and uses Pyubiomes for targeted biome sampling and village location.
+
+This release includes the scripts used to collect voxel chunks from Minecraft worlds and to estimate biome frequencies. The main entry points are:
+
+- `gen_data.py`: scrape block, biome, and metadata chunks from a running Minecraft server.
+- `get_biome_dist.py`: estimate biome frequencies by querying sparse biome samples from a running Minecraft server.
+- `auto_collect.py` and `auto_collect_biome_dist.py`: optional wrappers that regenerate worlds for one or more seeds, start the server, run the scraper, and stop the server.
+
+The scraper talks to a local Minecraft 1.12.2 server through the gRPC service defined in `src/main/proto/minecraft.proto`. The generated Python stubs are checked in under `clients/python/src/main/proto/`.
+
+## System Setup
+
+Use Java 8 for the Minecraft server.
+
+Linux:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y openjdk-8-jdk build-essential python3-dev
+```
+
+macOS:
+
+```bash
+/usr/libexec/java_home -v 1.8
+```
+
+Set up Python dependencies:
+
+```bash
+python -m pip install -U pip setuptools wheel
+python -m pip install -r requirements.txt
+python -m pip install -e Pyubiomes
+```
+
+The local `Pyubiomes` package builds a small C extension, so `python3-dev` or equivalent Python headers must be available.
+
+## Minecraft Server Setup
+
+Create a local `server/` directory containing:
+
+- `spongevanilla-1.12.2-7.3.0.jar`
+- `mods/minecraft-rpc-0.0.5.jar`
+
+The Minecraft server jar and custom RPC mod jar are runtime artifacts and are not installed by `pip`. Provide them with the release artifacts or recreate them from the Minecraft RPC server project before running the scrapers.
+
+Start the server once from inside `server/`:
+
+```bash
+cd server
+java -jar spongevanilla-1.12.2-7.3.0.jar nogui
+```
+
+On the first launch, accept the Minecraft EULA in `server/eula.txt`, then start the server again. The server is ready for scraping when it logs that the gRPC service is listening on port `5001`.
+
+To use a specific Java 8 executable on macOS:
+
+```bash
+cd server
+/usr/libexec/java_home -v 1.8 --exec java -jar spongevanilla-1.12.2-7.3.0.jar nogui
+```
+
+To inspect the world manually, install Minecraft Java Edition `1.12.2`, open Multiplayer, choose Direct Connect, and join `localhost`.
+
+World settings live in `server/server.properties`. To generate a fresh world after changing settings or `level-seed`, stop the server, delete the generated world directory, and restart the server.
+
+## Fast Biome Locator
+
+`gen_data.py` can use seed-based biome lookup for targeted biome scraping. Build the local cubiomes-backed helper once on a new Linux machine:
+
+```bash
+bash native/build_fast_biomes.sh
+```
+
+This produces `native/libdream_cubiomes.so` from the vendored sources in `Pyubiomes/cubiomes/`. If the shared library is missing, `seed_utils.py` will try to build it automatically on non-Windows systems; otherwise it falls back to the installed local `Pyubiomes` package.
+
+## Running `gen_data.py`
+
+Most settings live in `conf/config.yaml` and can be overridden from the command line through Hydra.
+
+Collect general overworld voxel chunks:
+
+```bash
+python gen_data.py data_gen.mode=voxels data.num_samples=1000
+```
+
+Collect chunks from a configured rectangular area:
+
+```bash
+python gen_data.py data_gen.mode=voxels_in_area data.map_name=my_world data.area_corners='[[0,0],[512,512]]'
+```
+
+Collect chunks from a target biome:
+
+```bash
+python gen_data.py data_gen.mode=targeted_biome data.targeted_biome_label=river data.num_samples=1000
+```
+
+Other supported modes are `villages`, `caves`, and `nether`. Outputs are written under `data/Voxels/` as compressed `.npz` part files or combined chunk files, depending on mode.
+
+## Running `get_biome_dist.py`
+
+Estimate biome frequencies from the running server:
+
+```bash
+python get_biome_dist.py --dimension overworld --max-radius-blocks 10000 --window-size 32
+```
+
+The output JSON defaults to `analysis/biome_distributions/` and includes raw biome counts, simplified biome counts, and the normalized distribution.
+
+## Player Selection
+
+Most scraping modes do not need to move a connected player. RPC methods that do move a player use the first online player by default. To force a specific player, set `MCRPC_PLAYER` in the server environment before launch.
+
+## Optional Automation
+
+Run `gen_data.py` across fresh worlds:
+
+```bash
+python auto_collect.py --iterations 3 --mode targeted_biome --targeted-biome-label river
+```
+
+Run biome-distribution estimates across fresh worlds:
+
+```bash
+python auto_collect_biome_dist.py --iterations 3 --dimension overworld
+```
+
+Both automation scripts expect `server/server.properties` and the server jar to already exist. They update `level-seed`, delete the configured world directory, start the server, wait for readiness, run the scraper, and stop the server.
