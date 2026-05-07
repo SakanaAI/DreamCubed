@@ -7,11 +7,15 @@ This repository contains the training, inference, and evaluation code for Dream-
 
 ## Pretrained Models
 
-Anonymized model checkpoints will be distributed through the supplementary materials for double blind review.
+Pretrained model weights and configs using the core dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-models
+
+Pretrained model weights and configs using the human-authored dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-human-models/tree/main
 
 ## Dataset
 
-Anonymized dataset will be distributed through the supplementary materials for double blind review.
+Core dataset (collected from procedurally generated Minecraft worlds) available in an anonymized Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedNatural
+
+Human-authored dataset (collected from human-authored Minecraft maps) available in an anonymized Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedHuman
 
 ## Setup
 
