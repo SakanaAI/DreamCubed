@@ -9,7 +9,7 @@ This repository contains the training, inference, and evaluation code for Dream-
 
 Pretrained model weights and configs using the core dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-models
 
-Pretrained model weights and configs using the human-authored dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-human-models/tree/main
+Pretrained model weights and configs using the human-authored dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-human-models
 
 ## Dataset
 
