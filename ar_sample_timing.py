@@ -28,11 +28,14 @@ from data_utils import BlockBiomeConverter
 def find_config(checkpoint_path, explicit=None):
     if explicit:
         return explicit
-    candidate = os.path.join(os.path.dirname(os.path.abspath(checkpoint_path)), 'config.json')
-    if not os.path.exists(candidate):
-        raise FileNotFoundError(
-            f'no config.json next to the checkpoint ({candidate}); pass --config')
-    return candidate
+    checkpoint_dir = os.path.dirname(os.path.abspath(checkpoint_path))
+    # HF exports keep weights in inference_weights/ and config.json one level up.
+    for directory in (checkpoint_dir, os.path.dirname(checkpoint_dir)):
+        candidate = os.path.join(directory, 'config.json')
+        if os.path.isfile(candidate):
+            return candidate
+    raise FileNotFoundError(
+        f'no config.json next to or above the checkpoint ({checkpoint_path}); pass --config')
 
 
 def extract_weights(ckpt, prefer_ema=True):

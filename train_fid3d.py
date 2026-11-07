@@ -333,6 +333,8 @@ def launch():
     train_ds = make_dataset(args.dataset_path, args.mappings_file_path, args.rotation_aug_prob)
     val_ds = make_dataset(args.val_dataset_path, args.mappings_file_path, 0.0)
     assert train_ds is not None and len(train_ds) > 0, 'empty training dataset'
+    if len(train_ds) < args.per_device_train_batch_size:
+        raise ValueError('Dataset is smaller than per_device_train_batch_size; reduce it to avoid an empty training loader.')
 
     num_biomes = args.num_classes or getattr(train_ds, 'num_classes', 0)
     assert num_biomes > 1, 'could not determine the number of biome classes; pass --num_classes'

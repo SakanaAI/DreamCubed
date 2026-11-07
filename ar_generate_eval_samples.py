@@ -148,11 +148,6 @@ def main():
         raise ValueError('checkpoint is unconditional; per-biome generation needs a '
                          'class-conditional model')
 
-    # convert_to_original_blocks treats a leading dimension equal to the vocabulary
-    # size as one-hot channels, so a batch of exactly that size would be mangled
-    if args.batch_size == vocab_size:
-        raise ValueError(f'--batch_size must not equal the vocabulary size ({vocab_size})')
-
     cond_scale = args.cond_scale
     if cond_scale is None:
         cond_scale = float(config.get('default_cond_scale', 1.0))

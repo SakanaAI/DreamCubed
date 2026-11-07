@@ -1251,19 +1251,13 @@ class MinecraftVisualizerPyVista:
             self.texture_dirs,
         )
         
-        # In strict mode, raise an error if any texture files are missing
-        if self.strict_mode and missing_files:
-            error_lines = [
-                f"Missing {len(missing_files)} texture file(s):",
-                "  Searched directories:",
-            ]
-            for d in self.texture_dirs:
-                error_lines.append(f"    - {d}")
-            error_lines.append("")
-            error_lines.append("Missing textures:")
-            for name in sorted(missing_files):
-                error_lines.append(f"  - {name}")
-            raise MissingTextureError("\n".join(error_lines))
+        # The default mapping spans several Minecraft versions. A release only
+        # needs textures for blocks actually rendered. Leave absent textures out
+        # of a strict atlas; mesh construction still rejects any missing texture
+        # used by a visible face, rather than silently substituting a placeholder.
+        if self.strict_mode:
+            texture_paths = {name: path for name, path in texture_paths.items()
+                             if name not in missing_files}
         
         imgs = _load_images_rgba(texture_paths, strict_mode=self.strict_mode)
         self.atlas_rgba, self.uv_rects = _build_texture_atlas(imgs)
@@ -1438,6 +1432,8 @@ class MinecraftVisualizerPyVista:
         # Validate block IDs have texture mappings; warn and skip any unknown blocks
         missing = self.validate_block_ids(voxels, block_types_json_path="assets/block_types_updated.json")
         if missing:
+            if self.strict_mode:
+                raise MissingBlockMappingError(f'Missing texture mappings for block IDs: {missing}')
             warn_lines = [f"[warn] missing texture mapping for {len(missing)} block type(s); skipping those voxels:"]
             for bid, cnt, name in sorted(missing, key=lambda x: -x[1]):
                 warn_lines.append(f"[warn]   ID {bid:4d} ({name:40s}): {cnt:>10,} voxels")
@@ -1877,7 +1873,7 @@ def save_chunks(sampled_chunks, epoch, results_out_dir, converter, visualizer=No
             )
             render_fn = visualizer.visualize_chunk_textured
         else:
-            visualizer = MinecraftVisualizerPyVista()
+            visualizer = MinecraftVisualizerPyVista(build_textures=False)
             render_fn = visualizer.visualize_chunk
 
     # TODO: convert back to integer (fill in once embedding implemented)
@@ -2551,7 +2547,7 @@ def visualize_sampling_gif(
         )
         render_fn = visualizer.visualize_chunk_textured
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         render_fn = visualizer.visualize_chunk
 
     frames = []

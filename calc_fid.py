@@ -13,11 +13,11 @@ from accelerate import Accelerator
 
 try:
     from cleanfid.features import build_feature_extractor
-    from cleanfid.fid import get_folder_features
+    from cleanfid.fid import get_files_features
     from cleanfid.resize import build_resizer
 except ImportError:  # pragma: no cover - dependency is validated at runtime
     build_feature_extractor = None
-    get_folder_features = None
+    get_files_features = None
     build_resizer = None
 
 from render_dataset import render_dataset_to_images
@@ -37,7 +37,7 @@ def _is_distributed(accelerator: Accelerator) -> bool:
 
 
 def _require_cleanfid() -> None:
-    if build_feature_extractor is None or get_folder_features is None or build_resizer is None:
+    if build_feature_extractor is None or get_files_features is None or build_resizer is None:
         raise ImportError(
             "calc_fid.py now uses clean-fid for canonical FID features. "
             "Install it with `pip install clean-fid`."
@@ -155,8 +155,10 @@ def extract_inception_features(
         device=device,
         use_dataparallel=False,
     )
-    all_features = get_folder_features(
-        fdir=image_dir,
+    # clean-fid's extension globs can count .png/.PNG twice on Windows.
+    # Use our unique file inventory for both feature rows and reported paths.
+    all_features = get_files_features(
+        paths,
         model=feat_model,
         num_workers=num_workers,
         batch_size=batch_size,
@@ -169,8 +171,8 @@ def extract_inception_features(
 
 
 def compute_statistics(features: np.ndarray) -> Tuple[np.ndarray, np.ndarray]:
-    if features.shape[0] == 0:
-        raise ValueError("No features to compute statistics from.")
+    if features.shape[0] < 2:
+        raise ValueError("FID covariance requires at least two images.")
     mu = np.mean(features, axis=0)
     sigma = np.cov(features, rowvar=False)
     return mu, sigma
@@ -1128,7 +1130,7 @@ def render_samples_to_images(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         render_fn = visualizer.visualize_chunk_textured
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         render_fn = visualizer.visualize_chunk
 
     N = block_ids.shape[0]

@@ -1679,7 +1679,7 @@ class Trainer:
         accelerator = self.accelerator
         device = accelerator.device
 
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
 
         with tqdm(initial = self.step, total = self.train_num_steps, disable = not accelerator.is_main_process) as pbar:
 
@@ -2106,7 +2106,7 @@ class VoxelTrainerClassConditional:
         assert len(self.ds) > 0, 'your dataset is empty'
 
         num_workers = int(dataloader_num_workers)
-        prefetch_factor = None if (dataloader_prefetch_factor in (None, 0)) else int(dataloader_prefetch_factor)
+        prefetch_factor = None if (num_workers == 0 or dataloader_prefetch_factor in (None, 0)) else int(dataloader_prefetch_factor)
         persistent_workers = bool(dataloader_persistent_workers) and num_workers > 0
         dl = DataLoader(
             self.ds,

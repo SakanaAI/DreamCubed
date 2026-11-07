@@ -165,6 +165,8 @@ class VoxelTrainerAR:
         self.best_val_step = None
 
         self.ds = dataset
+        if len(dataset) < train_batch_size:
+            raise ValueError('Dataset is smaller than the per-device batch size; drop_last would produce an empty loader.')
         assert len(self.ds) > 0, 'your dataset is empty'
         if num_workers < 0 or prefetch_factor < 1:
             raise ValueError('num_workers must be >= 0 and prefetch_factor >= 1')

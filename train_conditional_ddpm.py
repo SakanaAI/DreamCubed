@@ -279,20 +279,18 @@ def launch():
             args.train_batch_size, args.per_device_train_batch_size
         )
 
-    # derive steps/epochs
+    # Resolved configs saved with published checkpoints contain both steps and
+    # epoch metadata. Positive step values take precedence; derive from epochs
+    # only when the corresponding step value is non-positive.
     if args.train_num_steps <= 0:
         assert args.train_num_epochs > 0, "Either train_num_steps or train_num_epochs must be > 0"
         steps_per_epoch = max(1, len(voxel_dataset) // int(args.train_batch_size))
         args.train_num_steps = int(steps_per_epoch * int(args.train_num_epochs))
-    else:
-        assert args.train_num_epochs <= 0, "Only one of train_num_steps or train_num_epochs can be > 0"
 
     if args.save_and_sample_every <= 0:
         assert args.save_and_sample_every_epoch > 0, "Either save_and_sample_every or save_and_sample_every_epoch must be > 0"
         steps_per_epoch = max(1, len(voxel_dataset) // int(args.train_batch_size))
         args.save_and_sample_every = int(steps_per_epoch * int(args.save_and_sample_every_epoch))
-    else:
-        assert args.save_and_sample_every_epoch <= 0, "Only one of save_and_sample_every or save_and_sample_every_epoch can be > 0"
 
     # derive validation cadence (MD4-style)
     steps_per_epoch = max(1, len(voxel_dataset) // int(args.train_batch_size))
@@ -302,8 +300,6 @@ def launch():
             args.validate_every = int(steps_per_epoch * int(args.validate_every_epoch))
         else:
             args.validate_every = -1
-    else:
-        assert args.validate_every_epoch <= 0 or int(args.validate_every_epoch) <= 0, "Only one of validate_every or validate_every_epoch can be > 0"
 
     # save resolved config next to training results (results/run_name/exp_name/config.json)
     save_dir = os.path.join(args.results_folder, args.run_name, args.exp_name)

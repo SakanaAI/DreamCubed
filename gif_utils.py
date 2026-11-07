@@ -151,7 +151,7 @@ def render_diffusion_gif(
             visualizer = MinecraftVisualizerPyVista(build_textures=True)
         render_fn = visualizer.visualize_chunk_textured
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         render_fn = visualizer.visualize_chunk
 
     frames: List[Image.Image] = []

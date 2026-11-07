@@ -1,0 +1,2 @@
+# Bash scripts must stay executable by Bash after Windows checkouts.
+*.sh text eol=lf

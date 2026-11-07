@@ -922,7 +922,7 @@ def _load_block_id_to_embedding_from_pt(
     embeddings_dict_key: Optional[str] = None,
 ):
     """
-    Load a block_id -> embedding mapping from a .pt payload.
+    Load a block_id -> embedding mapping from a .pt payload or .npy table.
 
     Supported payloads:
       - {block_id: embedding}
@@ -930,7 +930,10 @@ def _load_block_id_to_embedding_from_pt(
       - {"block_to_emb": {...}} / {"block_id_to_embedding": {...}} / {"embeddings": {...}}
       - 2D tensor/ndarray [num_blocks, emb_dim], interpreted as row_index -> embedding
     """
-    payload = torch.load(embeddings_path, map_location="cpu", weights_only=False)
+    if Path(embeddings_path).suffix.lower() == '.npy':
+        payload = np.load(embeddings_path, allow_pickle=False)
+    else:
+        payload = torch.load(embeddings_path, map_location="cpu", weights_only=False)
 
     if embeddings_dict_key is not None:
         if not isinstance(payload, dict) or embeddings_dict_key not in payload:
@@ -1114,7 +1117,7 @@ class BlockBiomeConverter:
         strict: bool = True,
     ):
         """
-        Populate ``self.block_to_emb`` from a .pt file containing {block_id -> embedding}.
+        Populate ``self.block_to_emb`` from a .pt mapping or .npy embedding table.
         """
         block_id_to_emb, emb_dim = _load_block_id_to_embedding_from_pt(
             embeddings_path,
@@ -1140,7 +1143,7 @@ class BlockBiomeConverter:
         self._blockid_to_emb_lut_max_id = None
         return int(emb_dim)
     
-    def convert_to_original_blocks(self, data):
+    def convert_to_original_blocks(self, data, *, one_hot=None):
         """
         Convert from indices back to original block IDs.
         Handles both one-hot encoded and already-indexed data.
@@ -1152,8 +1155,13 @@ class BlockBiomeConverter:
         Returns:
             torch.Tensor of original block IDs with shape [B, H, W, D] or [H, W, D]
         """
-        # If one-hot encoded (dim == 5 or first dim == num_blocks), convert to indices first
-        if len(data.shape) == 5 or (len(data.shape) == 4 and data.shape[0] == len(self.block_to_index)):
+        # Four-dimensional integer tensors are batches of indices, even when
+        # batch size equals vocabulary size. Pass one_hot=True explicitly for
+        # integer unbatched [C,H,W,D] one-hot tensors.
+        if one_hot is None:
+            one_hot = data.ndim == 5 or (data.ndim == 4 and data.is_floating_point()
+                                        and data.shape[0] == len(self.block_to_index))
+        if one_hot:
             data = torch.argmax(data, dim=1 if len(data.shape) == 5 else 0)
         
         # Now convert indices to original blocks
@@ -1169,20 +1177,18 @@ class BlockBiomeConverter:
                                 for row in layer]
                                 for layer in data])
         
-    def convert_to_indices(self, data):
+    def convert_to_indices(self, data, *, one_hot=None):
         """
-        Convert from indices back to original block IDs.
-        Handles both one-hot encoded and already-indexed data.
-        
-        Args:
-            data: torch.Tensor of either:
-                - one-hot encoded blocks [B, C, H, W, D] or [C, H, W, D]
-                - indexed blocks [B, H, W, D] or [H, W, D]
-        Returns:
-            torch.Tensor of original block IDs with shape [B, H, W, D] or [H, W, D]
+        Convert raw block IDs [B,H,W,D] or [H,W,D] to vocabulary indices.
+
+        For legacy one-hot input, channel positions must be raw block IDs.
+        Integer unbatched one-hot tensors require one_hot=True explicitly;
+        ordinary four-dimensional integer tensors are batches of raw IDs.
         """
-        # If one-hot encoded (dim == 5 or first dim == num_blocks), convert to indices first
-        if len(data.shape) == 5 or (len(data.shape) == 4 and data.shape[0] == len(self.block_to_index)):
+        if one_hot is None:
+            one_hot = data.ndim == 5 or (data.ndim == 4 and data.is_floating_point()
+                                        and data.shape[0] == len(self.block_to_index))
+        if one_hot:
             data = torch.argmax(data, dim=1 if len(data.shape) == 5 else 0)
         
         # Now convert indices to original blocks

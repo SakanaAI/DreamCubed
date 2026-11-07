@@ -17,7 +17,19 @@ import pandas as pd
 from tqdm import tqdm
 
 from utils import get_view_rot, square_spiral, get_vox_xz_from_view, patch_grpc_evocraft_imports
-from seed_utils import find_villages_near_spawn, find_biome_locations
+from PIL import ImageGrab
+
+
+def find_villages_near_spawn(*args, **kwargs):
+    # The native extension is only needed for seed-based location, not generic
+    # RPC scraping, --help, or conversion of already collected responses.
+    from seed_utils import find_villages_near_spawn as locate
+    return locate(*args, **kwargs)
+
+
+def find_biome_locations(*args, **kwargs):
+    from seed_utils import find_biome_locations as locate
+    return locate(*args, **kwargs)
 
 patch_grpc_evocraft_imports()
 

@@ -5,7 +5,7 @@ defaults:
   # - task: inpaint_vox
 
   # - override hydra/launcher: submitit_slurm 
-  - override hydra/launcher: submitit_local
+  - override hydra/launcher: basic
 
 hydra:
   sweeper:
@@ -13,17 +13,6 @@ hydra:
       exp_name: 0, 1, 2
       train.lr: 1e-3, 5e-4, 1e-4, 5e-5, 1e-5, 5e-6, 1e-6
       # task.num_views: 1, 2, 3, 4, 5, 6, 7, 8
-  launcher:
-    # submitit_folder: /checkpoint/${USER}/mc_runs/
-    # queue: xeon
-    tasks_per_node: 1
-    cpus_per_task: 1
-    gpus_per_node: 1
-    timeout_min: 1440
-    # timeout_min: 60
-    mem_gb: 10
-    # Change to your email
-    # slurm_additional_parameters: ["--signal=USR1@120", "--cpus-per-task=10", "--mem=10G", "--mail-type=ALL", "--mail-user=your_email"]
 
 exp_name: 0
 save_dir: None

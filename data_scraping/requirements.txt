@@ -1,0 +1,12 @@
+# Python dependencies for the checked-in gRPC stubs and scraper CLI.
+grpcio>=1.76,<2
+protobuf>=6.31.1,<7
+hydra-core>=1.3,<1.4
+omegaconf>=2.3,<2.4
+fire>=0.7
+numpy>=1.26,<3
+einops>=0.8
+pandas>=2
+matplotlib>=3.8
+tqdm>=4.66
+pillow>=10

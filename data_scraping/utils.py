@@ -76,13 +76,14 @@ def get_vox_xz_from_view(x, z, rot, offset):
 
 
 def patch_grpc_evocraft_imports():
-    # HACK: Replace relative import
-    with open("clients/python/src/main/proto/minecraft_pb2_grpc.py", "r") as f:
+    # Resolve against this module, independent of the caller's working directory.
+    path = os.path.join(os.path.dirname(__file__), 'clients', 'python', 'src', 'main', 'proto', 'minecraft_pb2_grpc.py')
+    with open(path, "r") as f:
         contents = f.read()
-    contents = contents.replace("from src.main.proto", "from clients.python.src.main.proto")
-    # Write file contents
-    with open("clients/python/src/main/proto/minecraft_pb2_grpc.py", "w") as f:
-        f.write(contents)
+    updated = contents.replace("from src.main.proto", "from clients.python.src.main.proto")
+    if updated != contents:
+        with open(path, "w") as f:
+            f.write(updated)
 
 
 def get_view_rot(j, n_views):
