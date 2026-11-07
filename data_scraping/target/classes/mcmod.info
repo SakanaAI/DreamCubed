@@ -1,0 +1,14 @@
+[
+    {
+        "modid": "minecraft_rpc",
+        "name": "Minecraft RPC",
+        "version": "1.0",
+        "description": "A plugin for Sponge which lets you control Minecraft using gRPC.",
+        "dependencies": [
+            "spongeapi@7.2.0"
+        ],
+        "requiredMods": [
+            "spongeapi@7.2.0"
+        ]
+    }
+]
