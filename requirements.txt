@@ -1,0 +1,14 @@
+denoising_diffusion_pytorch
+tensorboard
+wandb
+openai
+datasets
+huggingface
+pyvista
+panel
+scipy
+scikit-learn
+transformers
+deepspeed
+accelerate
+clean-fid

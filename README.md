@@ -1,21 +1,22 @@
 # DreamCubed
 
-This repository contains the training, inference, and evaluation code for Dream-Cubed. The two training entry points are:
+This repository contains the training, inference, and evaluation code for Dream-Cubed. The generative-model training entry points are:
 
 - `train_discrete.py` for the discrete MD4 model
 - `train_conditional_ddpm.py` for the continuous DDPM model
+- `train_autoregressive.py` for the autoregressive (AR) baseline
 
 ## Pretrained Models
 
-Pretrained model weights and configs using the core dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-models
+Pretrained model weights and configs using the core dataset are available in the public Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-models
 
-Pretrained model weights and configs using the human-authored dataset are available in an anonymized Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-human-models/tree/main
+Pretrained model weights and configs using the human-authored dataset are available in the public Hugging Face model: https://huggingface.co/dream-cubed/dream-cubed-human-models
 
 ## Dataset
 
-Core dataset (collected from procedurally generated Minecraft worlds) available in an anonymized Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedNatural
+Core dataset (collected from procedurally generated Minecraft worlds) available in the public Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedNatural
 
-Human-authored dataset (collected from human-authored Minecraft maps) available in an anonymized Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedHuman
+Human-authored dataset (collected from human-authored Minecraft maps) available in the public Hugging Face dataset: https://huggingface.co/datasets/dream-cubed/DreamCubedHuman
 
 ## Setup
 
@@ -50,6 +51,21 @@ bash launch_ddpm.sh <num_gpus> <path/to/config.json>
 This calls `train_conditional_ddpm.py`, which trains the continuous DDPM model with a DiT backbone. Its configs follow the same structure as MD4, but also require the embedding-related fields used by the continuous representation, especially `embeddings_path` and `data_channels`.
 
 Training config examples are not bundled in this clean repo, but any JSON passed to the launchers can set the arguments exposed by the trainer entry points.
+
+### Autoregressive baseline
+
+`train_autoregressive.py` uses `autoregressive_dit.py` and `autoregressive_trainer.py`. Supply a training JSON with your dataset/mapping paths and model settings; use the resolved config from the evaluated run when reproducing results.
+
+```bash
+python train_autoregressive.py --config path/to/ar_config.json
+python ar_generate_eval_samples.py \
+  --checkpoint path/to/model_best.pt \
+  --config path/to/config.json \
+  --out_dir renders/per_biome_gen --run_id ar_baseline \
+  --samples_per_biome 100 --no_render
+```
+
+`ar_generate_eval_samples.py` also requires `ar_sample_timing.py`. Set the mapping path in the resolved config to your local dataset mapping. The generated per-biome voxel files can be evaluated with the metrics below.
 
 ## Inference
 
@@ -258,6 +274,28 @@ python calc_fid.py \
   --dataset_path path/to/reference_dataset \
   --samples_per_biome 100
 ```
+
+## Voxel-based evaluation
+
+`train_fid3d.py` trains the 3D feature extractor defined in `fid3d_model.py`:
+
+```bash
+python train_fid3d.py --config path/to/fid3d_config.json
+```
+
+The evaluation scripts compute 3D FID (`fid3d_eval.py`), KID/MMD (`kernel3d_eval.py`), and MAUVE (`mauve3d_eval.py`). For example:
+
+```bash
+python fid3d_eval.py \
+  --samples_dir path/to/generated_voxel_samples \
+  --checkpoint path/to/feature_extractor_best.pt \
+  --ref_dataset path/to/restored_validation_split \
+  --mappings_path path/to/mappings.pt
+```
+
+Replace `fid3d_eval.py` with `kernel3d_eval.py` or `mauve3d_eval.py` to run the other metrics with the same inputs. Here `--checkpoint` is the trained feature extractor, not the generator. Samples default to raw block IDs; processed references default to vocabulary indices. Use the matching mapping and an unsharded/restored validation split. Both companion scripts depend on `fid3d_eval.py` and `fid3d_model.py`.
+
+Use the same extractor, reference data, sample counts and protocol settings across models; see each script's `--help` for options. These are usage examples, not the complete settings for reproducing the paper's tables.
 
 ## Notes
 
