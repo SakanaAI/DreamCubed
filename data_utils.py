@@ -377,6 +377,34 @@ def rotate_voxels_90_fix_stairs_torch(voxels: torch.Tensor, k: int = 1) -> torch
     return out
 
 
+def volume_to_patch_voxels(x: torch.Tensor, patch_size: int) -> torch.Tensor:
+    """[B, S, S, S] volume -> [B, T, p^3] patches in conv token order.
+
+    Token t maps to patch-grid coordinates (zg, xg, yg) with
+    t = (zg * g + xg) * g + yg, matching the flatten order of `dit.PatchEmbed3D`
+    on a volume permuted to [B, C, Z, X, Y].  Voxels inside a patch are ordered
+    Y slowest, then Z, then X.
+    """
+    b, s = x.shape[0], x.shape[1]
+    p = patch_size
+    g = s // p
+    xp = x.reshape(b, g, p, g, p, g, p)          # xg xp yg yp zg zp
+    xp = xp.permute(0, 5, 1, 3, 4, 6, 2)         # b zg xg yg | yp zp xp
+    return xp.reshape(b, g * g * g, p * p * p)
+
+
+def patch_voxels_to_volume(xv: torch.Tensor, patch_size: int) -> torch.Tensor:
+    """Inverse of :func:`volume_to_patch_voxels`."""
+    b = xv.shape[0]
+    p = patch_size
+    g = round(xv.shape[1] ** (1.0 / 3.0))
+    while g * g * g < xv.shape[1]:
+        g += 1
+    x = xv.reshape(b, g, g, g, p, p, p)
+    x = x.permute(0, 2, 6, 3, 4, 1, 5)
+    return x.reshape(b, g * p, g * p, g * p)
+
+
 def condense_biomes(biomes, biome_mapping):
     """
     Combine similar biomes according to mapping.
@@ -888,6 +916,74 @@ def load_block_to_str_mapping(file_path="assets/block_types.json"):
         str_mapping = json.load(f)
     return {int(k): v for k, v in str_mapping.items()}
 
+
+def _load_block_id_to_embedding_from_pt(
+    embeddings_path: str,
+    embeddings_dict_key: Optional[str] = None,
+):
+    """
+    Load a block_id -> embedding mapping from a .pt payload.
+
+    Supported payloads:
+      - {block_id: embedding}
+      - {"some_key": {block_id: embedding}} with embeddings_dict_key provided
+      - {"block_to_emb": {...}} / {"block_id_to_embedding": {...}} / {"embeddings": {...}}
+      - 2D tensor/ndarray [num_blocks, emb_dim], interpreted as row_index -> embedding
+    """
+    payload = torch.load(embeddings_path, map_location="cpu", weights_only=False)
+
+    if embeddings_dict_key is not None:
+        if not isinstance(payload, dict) or embeddings_dict_key not in payload:
+            raise KeyError(
+                f"Key '{embeddings_dict_key}' not found in embeddings payload at {embeddings_path}"
+            )
+        payload = payload[embeddings_dict_key]
+    elif isinstance(payload, dict):
+        for candidate_key in ("block_id_to_embedding", "block_to_emb", "embeddings"):
+            candidate = payload.get(candidate_key, None)
+            if isinstance(candidate, dict):
+                payload = candidate
+                break
+
+    block_id_to_emb = {}
+
+    if isinstance(payload, dict):
+        for raw_key, raw_value in payload.items():
+            try:
+                block_id = int(raw_key)
+            except Exception as exc:
+                raise ValueError(
+                    f"Could not interpret embedding key '{raw_key}' as an integer block id "
+                    f"in {embeddings_path}"
+                ) from exc
+
+            if isinstance(raw_value, torch.Tensor):
+                vec = raw_value.detach().cpu().float().reshape(-1)
+            else:
+                vec = torch.as_tensor(raw_value, dtype=torch.float32).reshape(-1)
+
+            block_id_to_emb[block_id] = vec.numpy()
+    elif isinstance(payload, torch.Tensor) or isinstance(payload, np.ndarray):
+        arr = payload.detach().cpu().numpy() if isinstance(payload, torch.Tensor) else np.asarray(payload)
+        if arr.ndim != 2:
+            raise ValueError(
+                f"Expected 2D tensor/ndarray embeddings payload at {embeddings_path}, got shape {arr.shape}"
+            )
+        for block_id in range(arr.shape[0]):
+            block_id_to_emb[int(block_id)] = np.asarray(arr[block_id], dtype=np.float32).reshape(-1)
+    else:
+        raise ValueError(
+            f"Unsupported embeddings payload type in {embeddings_path}: {type(payload).__name__}"
+        )
+
+    if len(block_id_to_emb) == 0:
+        raise ValueError(f"No block embeddings found in {embeddings_path}")
+
+    first = next(iter(block_id_to_emb.values()))
+    emb_dim = int(np.asarray(first, dtype=np.float32).reshape(-1).shape[0])
+    return block_id_to_emb, emb_dim
+
+
 class BlockBiomeConverter:
     def __init__(self, block_mappings=None, biome_mappings=None):
         """
@@ -906,6 +1002,8 @@ class BlockBiomeConverter:
         # Cache for embedding-to-block conversion (for efficiency)
         self._embedding_matrix = None
         self._block_ids_list = None
+        self._blockid_to_emb_lut = None
+        self._blockid_to_emb_lut_max_id = None
 
         if block_mappings:
             self.index_to_block = block_mappings.get('index_to_block')
@@ -1008,6 +1106,39 @@ class BlockBiomeConverter:
                 'biome_to_index': self.biome_to_index
             }
         }, path)
+
+    def load_embeddings_pt(
+        self,
+        embeddings_path: str = "assets/new_embeddings.pt",
+        embeddings_dict_key: Optional[str] = None,
+        strict: bool = True,
+    ):
+        """
+        Populate ``self.block_to_emb`` from a .pt file containing {block_id -> embedding}.
+        """
+        block_id_to_emb, emb_dim = _load_block_id_to_embedding_from_pt(
+            embeddings_path,
+            embeddings_dict_key=embeddings_dict_key,
+        )
+
+        if self.index_to_block is None:
+            self.block_to_emb = block_id_to_emb
+        else:
+            needed = sorted({int(v) for v in self.index_to_block.values()})
+            missing = [bid for bid in needed if bid not in block_id_to_emb]
+            if strict and len(missing) > 0:
+                show = missing[:50]
+                raise ValueError(
+                    f"Missing embeddings for {len(missing)}/{len(needed)} block IDs from {embeddings_path}. "
+                    f"Examples: {show}"
+                )
+            self.block_to_emb = {bid: block_id_to_emb[bid] for bid in needed if bid in block_id_to_emb}
+
+        self._embedding_matrix = None
+        self._block_ids_list = None
+        self._blockid_to_emb_lut = None
+        self._blockid_to_emb_lut_max_id = None
+        return int(emb_dim)
     
     def convert_to_original_blocks(self, data):
         """
@@ -1257,6 +1388,98 @@ class BlockBiomeConverter:
             self._embedding_matrix = torch.tensor(np.array(embeddings_list), dtype=torch.float32)
         
         return self._embedding_matrix, self._block_ids_list
+
+    def _prepare_blockid_to_emb_lut(self):
+        """
+        Prepare a dense LUT so block_id tensors can be mapped to embeddings via indexing.
+        """
+        if self.block_to_emb is None:
+            raise ValueError("Block embeddings not initialized")
+        if len(self.block_to_emb) == 0:
+            raise ValueError("Block embeddings empty")
+
+        max_id = int(max(self.block_to_emb.keys()))
+        if self._blockid_to_emb_lut is not None and self._blockid_to_emb_lut_max_id == max_id:
+            return self._blockid_to_emb_lut
+
+        first = next(iter(self.block_to_emb.values()))
+        if isinstance(first, torch.Tensor):
+            first = first.detach().cpu().numpy()
+        first = np.asarray(first, dtype=np.float32).reshape(-1)
+        emb_dim = int(first.shape[0])
+
+        lut = np.zeros((max_id + 1, emb_dim), dtype=np.float32)
+        lut[:] = first
+        for bid, vec in self.block_to_emb.items():
+            block_id = int(bid)
+            if isinstance(vec, torch.Tensor):
+                vec = vec.detach().cpu().numpy()
+            vec = np.asarray(vec, dtype=np.float32).reshape(-1)
+            if vec.shape[0] != emb_dim:
+                raise ValueError(
+                    f"Embedding dim mismatch for block_id={block_id}: got {vec.shape[0]}, expected {emb_dim}"
+                )
+            if 0 <= block_id <= max_id:
+                lut[block_id] = vec
+
+        self._blockid_to_emb_lut = torch.from_numpy(lut).float()
+        self._blockid_to_emb_lut_max_id = max_id
+        return self._blockid_to_emb_lut
+
+    def convert_blocks_to_embeddings(self, block_ids: torch.Tensor):
+        """
+        Convert block IDs -> embedding grid.
+
+        Args:
+            block_ids: torch.Tensor with shape [B,H,W,D] or [H,W,D]
+        Returns:
+            torch.Tensor with shape [B,E,H,W,D] or [E,H,W,D]
+        """
+        if not isinstance(block_ids, torch.Tensor):
+            block_ids = torch.as_tensor(block_ids, dtype=torch.long)
+        else:
+            block_ids = block_ids.to(dtype=torch.long)
+
+        lut = self._prepare_blockid_to_emb_lut().to(device=block_ids.device)
+        max_id = int(lut.shape[0]) - 1
+        if torch.any(block_ids < 0) or torch.any(block_ids > max_id):
+            bad = block_ids[(block_ids < 0) | (block_ids > max_id)]
+            bad_uniq = torch.unique(bad)[:50].tolist()
+            raise ValueError(f"Block IDs out of range for embeddings LUT (max_id={max_id}). Examples: {bad_uniq}")
+
+        if block_ids.dim() == 4:
+            emb = lut[block_ids]
+            emb = emb.permute(0, 4, 1, 2, 3)
+            return emb.contiguous()
+        if block_ids.dim() == 3:
+            emb = lut[block_ids]
+            emb = emb.permute(3, 0, 1, 2)
+            return emb.contiguous()
+        raise ValueError(f"Expected block_ids dim 3 or 4, got {tuple(block_ids.shape)}")
+
+    def convert_indices_to_embeddings(self, indices: torch.Tensor):
+        """
+        Convert dataset block indices -> embedding grid.
+
+        Args:
+            indices: torch.Tensor with shape [B,H,W,D] or [H,W,D]
+        Returns:
+            torch.Tensor with shape [B,E,H,W,D] or [E,H,W,D]
+        """
+        if self.index_to_block is None:
+            raise ValueError("Block mappings not initialized")
+        if not isinstance(indices, torch.Tensor):
+            indices = torch.as_tensor(indices, dtype=torch.long)
+        else:
+            indices = indices.to(dtype=torch.long)
+
+        num_blocks = int(len(self.index_to_block))
+        idx_to_bid = torch.empty((num_blocks,), dtype=torch.long)
+        for i in range(num_blocks):
+            idx_to_bid[i] = int(self.index_to_block[int(i)])
+        idx_to_bid = idx_to_bid.to(device=indices.device)
+        block_ids = idx_to_bid[indices]
+        return self.convert_blocks_to_embeddings(block_ids)
 
     def convert_emb_to_blocks(self, data, distance_metric='l2'):
         """
