@@ -63,7 +63,7 @@ def render_dataset_to_images(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         render_fn = visualizer.visualize_chunk_textured
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         render_fn = visualizer.visualize_chunk
 
     # Determine corruption settings if requested
@@ -195,7 +195,7 @@ def render_dataset_to_images_by_biome(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         render_fn = visualizer.visualize_chunk_textured
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         render_fn = visualizer.visualize_chunk
 
     # Corruption settings (optional)

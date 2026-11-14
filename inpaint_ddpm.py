@@ -835,7 +835,8 @@ def load_ddpm_model(
         print(f"  Decode matrix from checkpoint: {decode_embedding_matrix.shape[0]} candidates")
     else:
         # Fallback for older checkpoints: restrict decode candidates to block IDs that
-        # actually exist in the model's block mapping, and map them back to model indices.
+        # actually exist in the model's block mapping. Keep decode IDs in raw
+        # block-ID space, matching checkpoints that include their decode table.
         decode_pairs = sorted(
             (int(block_id), int(model_idx))
             for block_id, model_idx in converter.block_to_index.items()
@@ -852,11 +853,7 @@ def load_ddpm_model(
             dtype=torch.long,
             device=dev,
         )
-        decode_block_ids = torch.tensor(
-            [model_idx for _, model_idx in decode_pairs],
-            dtype=torch.long,
-            device=dev,
-        )
+        decode_block_ids = decode_source_block_ids
         decode_embedding_matrix = embeddings[decode_source_block_ids]
         print(
             "  Using mapped decode candidates from full embeddings: "
@@ -1024,6 +1021,17 @@ def embeddings_to_voxels(
 
     # Reshape back to native chunk order [B, H, W, D]
     return block_indices.view(B, H, W, D)
+
+
+def decode_embeddings_to_indices(embeddings, decode_embedding_matrix, decode_block_ids, converter):
+    """Decode into model vocabulary indices for saved inpainting payloads.
+
+    A checkpoint's decode table can contain a subset/reordering of raw block
+    IDs. Nearest-neighbor output with decode_block_ids is already raw IDs and
+    must be mapped back to vocabulary indices before the usual export step.
+    """
+    decoded = embeddings_to_voxels(embeddings, decode_embedding_matrix, decode_block_ids).cpu()
+    return converter.convert_to_indices(decoded) if decode_block_ids is not None else decoded
 
 
 def load_biomes_from_folder(
@@ -1226,7 +1234,7 @@ def run_batched_inpainting_experiments(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     elif render:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
 
     for sample in samples:
         biome_name = sample["biome_name"]
@@ -1271,10 +1279,11 @@ def run_batched_inpainting_experiments(
             class_labels,
             cond_scale=cond_scale,
         )
-        inpainted_result = embeddings_to_voxels(
+        inpainted_result = decode_embeddings_to_indices(
             inpainted_embeddings,
             decode_embedding_matrix,
             decode_block_ids,
+            converter,
         )
 
         source_blocks = converter.convert_to_original_blocks(source_batch.cpu())
@@ -1437,7 +1446,7 @@ def _run_seeded_batch(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     elif render:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
 
     total = int(source_indices.shape[1] * source_indices.shape[2] * source_indices.shape[3])
     num_context = int(known_counts[0].item())
@@ -1465,10 +1474,11 @@ def _run_seeded_batch(
         class_labels,
         cond_scale=effective_cond_scale,
     )
-    inpainted_result = embeddings_to_voxels(
+    inpainted_result = decode_embeddings_to_indices(
         inpainted_embeddings,
         decode_embedding_matrix,
         decode_block_ids,
+        converter,
     )
 
     result_dir = output_dir / _sanitize_output_name(batch_name)
@@ -1610,16 +1620,19 @@ def run_biome_swap_experiments(
     cond_scale: float = 6.0,
     textures_dir: str = "block_textures/",
     image_size: int = 512,
+    render: bool = True,
 ) -> Dict[str, Any]:
     """Run biome swap inpainting experiments."""
     B, C, D, H, W = source_embeddings.shape
     results = {}
     
-    if textures_dir and os.path.exists(textures_dir):
+    visualizer = None
+    textured = False
+    if render and textures_dir and os.path.exists(textures_dir):
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
-    else:
-        visualizer = MinecraftVisualizerPyVista()
+    elif render:
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         textured = False
     
     # Select target biomes once
@@ -1664,7 +1677,7 @@ def run_biome_swap_experiments(
         )
         
         print(f"  Converting embeddings to voxels...")
-        inpainted_voxels = embeddings_to_voxels(inpainted_embeddings, decode_embedding_matrix, decode_block_ids)
+        inpainted_voxels = decode_embeddings_to_indices(inpainted_embeddings, decode_embedding_matrix, decode_block_ids, converter)
         
         exp_results = {}
         for i, biome_name in enumerate(biome_names):
@@ -1684,6 +1697,10 @@ def run_biome_swap_experiments(
                 "target_biome": swapped_name,
             }
             torch.save(biome_results, biome_dir / "results.pt")
+
+            if not render:
+                exp_results[folder_name] = biome_results
+                continue
             
             source_blocks = converter.convert_to_original_blocks(source_i.unsqueeze(0))[0]
             inpainted_blocks = converter.convert_to_original_blocks(inpainted_i.unsqueeze(0))[0]
@@ -1949,6 +1966,7 @@ def main():
         cond_scale=args.cond_scale,
         textures_dir=args.textures_dir,
         image_size=args.image_size,
+        render=not args.no_render,
     )
 
     print("\n" + "=" * 60)

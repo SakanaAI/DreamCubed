@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+.venv/
+.smoke-runs/
+# clean-fid's Windows cache of the Inception feature extractor
+inception-2015-12-05.pt

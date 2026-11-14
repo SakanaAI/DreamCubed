@@ -1383,7 +1383,7 @@ def _run_seeded_batch(
             visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
             textured = True
         else:
-            visualizer = MinecraftVisualizerPyVista()
+            visualizer = MinecraftVisualizerPyVista(build_textures=False)
 
     total = int(source_indices.shape[1] * source_indices.shape[2] * source_indices.shape[3])
     num_context = int(known_counts[0].item())
@@ -1616,7 +1616,7 @@ def run_inpainting_experiment(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         textured = False
     
     # Experiment configurations: (name, mode, fraction_to_inpaint, ring_thickness)
@@ -1783,7 +1783,7 @@ def run_batched_inpainting_experiments(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     elif render:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
 
     for sample in samples:
         biome_name = sample["biome_name"]
@@ -2013,7 +2013,7 @@ def run_biome_swap_experiments(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     elif render:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
     for sample in samples:
         source_biome = sample["biome_name"]
         source_biome_idx = int(sample["biome_index"])
@@ -2261,7 +2261,7 @@ def run_village_experiments(
         visualizer = MinecraftVisualizerPyVista(textures_dir=textures_dir, build_textures=True)
         textured = True
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         textured = False
     
     # Find village biome index

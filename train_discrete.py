@@ -138,7 +138,7 @@ def launch():
     parser.add_argument('--mode', type=str, default=config.get('mode', 'conditional'), choices=['conditional', 'unconditional'], help="Training mode: 'conditional' or 'unconditional'")
 
     # model selection
-    parser.add_argument('--model_type', type=str, default=config.get('model_type', 'unet'), help="Model type: 'unet' or 'dit'")
+    parser.add_argument('--model_type', type=str, default=config.get('model_type', 'dit'), choices=['dit'], help='DiT backbone')
 
     # shared / unet args
     parser.add_argument('--image_size', type=int, default=config.get('image_size', 16), help='Voxel cube size')
@@ -165,6 +165,7 @@ def launch():
 
     # trainer
     parser.add_argument('--train_batch_size', type=int, default=config.get('train_batch_size', 128))
+    parser.add_argument('--dataloader_num_workers', type=int, default=config.get('dataloader_num_workers', 2))
     parser.add_argument('--per_device_train_batch_size', type=int, default=config.get('per_device_train_batch_size', 16))
     parser.add_argument('--gradient_accumulate_every', type=int, default=config.get('gradient_accumulate_every', -1), help='Override gradient accumulation steps (if > 0)')
     parser.add_argument('--train_lr', type=float, default=config.get('train_lr', 1e-4))
@@ -231,6 +232,9 @@ def launch():
     parser.add_argument('--resume_path', type=str, default=config.get('resume_path', ''), help='Optional explicit path to checkpoint (.pt). Defaults to model_best.pt in save dir when --resume=true')
     parser.add_argument('--resume_override_step', type=int, default=config.get('resume_override_step', -1), help='Optional override for global step when resuming (aligns scheduler too)')
     args = parser.parse_args(remaining_argv)
+
+    if args.fid_num_samples > 0:
+        parser.error('In-training FID is not supported by the released MD4 trainer; use calc_fid.py or fid3d_eval.py after training.')
 
     if len(args.exp_name) == 0:
         timestamp = datetime.datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -317,6 +321,8 @@ def launch():
             args.train_batch_size, args.per_device_train_batch_size)
 
     # derive steps/epochs
+    if args.train_batch_size <= 0 or len(dataset) < args.train_batch_size:
+        raise ValueError('Dataset must contain at least train_batch_size samples; reduce the effective batch size for small datasets.')
     if args.train_num_steps <= 0:
         assert args.train_num_epochs > 0, "Either train_num_steps or train_num_epochs must be > 0"
         args.train_num_steps = (len(dataset) // args.train_batch_size) * args.train_num_epochs
@@ -373,6 +379,7 @@ def launch():
             dataset,
             save_dir,
             train_batch_size=args.per_device_train_batch_size,
+            dataloader_num_workers=args.dataloader_num_workers,
             gradient_accumulate_every=gradient_accumulate_every,
             train_lr=args.train_lr,
             train_num_steps=args.train_num_steps,
@@ -400,24 +407,8 @@ def launch():
             sampling_timesteps=args.sampling_timesteps,
             val_dataset=val_dataset,
             val_every_n_steps=args.validate_every,
-            inpaint_preview_paths=[
-                "scratch/clean_71.pt",
-                "scratch/clean_131.pt",
-            ],
-            inpaint_bounds=[
-                dict(x_start=0, x_end=16, y_start=0, y_end=16, z_start=5, z_end=16),
-                dict(x_start=0, x_end=16, y_start=0, y_end=16, z_start=5, z_end=16),
-            ],
-            inpaint_num_variants=4,
             use_wandb=args.use_wandb,
             wandb_log_images=args.wandb_log_images,
-            # FID
-            fid_ref_images_dir=args.fid_ref_images_dir,
-            fid_num_samples=args.fid_num_samples,
-            fid_every_steps=args.fid_every_steps,
-            fid_textures_dir=args.fid_textures_dir,
-            fid_batch_size=args.fid_batch_size,
-            fid_num_workers=args.fid_num_workers,
         )
     else:
         trainer = VoxelTrainerMD4(
@@ -425,6 +416,7 @@ def launch():
             dataset,
             save_dir,
             train_batch_size=args.per_device_train_batch_size,
+            dataloader_num_workers=args.dataloader_num_workers,
             gradient_accumulate_every=gradient_accumulate_every,
             train_lr=args.train_lr,
             train_num_steps=args.train_num_steps,
@@ -449,13 +441,6 @@ def launch():
             sampling_timesteps=args.sampling_timesteps,
             use_wandb=args.use_wandb,
             wandb_log_images=args.wandb_log_images,
-            # FID
-            fid_ref_images_dir=args.fid_ref_images_dir,
-            fid_num_samples=args.fid_num_samples,
-            fid_every_steps=args.fid_every_steps,
-            fid_textures_dir=args.fid_textures_dir,
-            fid_batch_size=args.fid_batch_size,
-            fid_num_workers=args.fid_num_workers,
         )
 
     # optional resume

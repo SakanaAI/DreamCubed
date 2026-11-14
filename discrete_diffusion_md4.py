@@ -614,6 +614,7 @@ class VoxelTrainerMD4:
         results_folder,
         *,
         train_batch_size = 8,
+        dataloader_num_workers = 2,
         gradient_accumulate_every = 1,
         train_lr = 1e-4,
         train_num_steps = 100000,
@@ -712,11 +713,11 @@ class VoxelTrainerMD4:
         # dataset and dataloader
         self.ds = dataset
         assert len(self.ds) > 0, 'your dataset is empty'
-        num_workers = 2
+        num_workers = int(dataloader_num_workers)
         min(8, os.cpu_count() // max(1, torch.cuda.device_count()))
         dl = DataLoader(self.ds, batch_size=train_batch_size, shuffle=True, pin_memory=True,
-                num_workers=num_workers, persistent_workers=True, drop_last=True,
-                prefetch_factor=2)
+                num_workers=num_workers, persistent_workers=num_workers > 0, drop_last=True,
+                prefetch_factor=2 if num_workers > 0 else None)
         # dl = DataLoader(self.ds, batch_size = train_batch_size, shuffle = True, pin_memory = True, num_workers = num_workers)
 
         # validation
@@ -1550,5 +1551,3 @@ class VoxelTrainerMD4:
         if self.accelerator.is_main_process and self.save_only_last_checkpoint:
             self.save("final")
         self.plot_losses()
-        
-    

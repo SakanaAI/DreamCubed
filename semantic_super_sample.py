@@ -2466,7 +2466,7 @@ def main():
         )
         textured = True
     else:
-        visualizer = MinecraftVisualizerPyVista()
+        visualizer = MinecraftVisualizerPyVista(build_textures=False)
         textured = False
 
     if layout_spec["display_grid"] is not None:
